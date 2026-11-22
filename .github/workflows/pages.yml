@@ -1,21 +1,28 @@
-name: Browser tool · Check and publish
+name: Radar Scope · Collect, check and publish
 on:
   pull_request:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '37 9 * * *'
 permissions:
   contents: read
+concurrency:
+  group: radarscope-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    permissions:
+      contents: write
     outputs:
       publish: ${{ steps.identity.outputs.publish }}
     steps:
       - uses: actions/checkout@v6
         with:
-          persist-credentials: false
+          persist-credentials: true
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -26,6 +33,17 @@ jobs:
         run: node --test tests/*.test.mjs
       - name: Test the builder
         run: python3 -m unittest discover -s tests -v
+      - name: Collect authenticated Radar snapshot
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          CLOUDFLARE_RADAR_API_TOKEN: ${{ secrets.CLOUDFLARE_RADAR_API_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            python3 scripts/collect.py
+          else
+            python3 scripts/collect.py --if-missing
+          fi
       - name: Build the static application
         run: python3 scripts/build.py
       - name: Check whether the tool has been initialized
@@ -53,6 +71,16 @@ jobs:
           name: browser-checks
           path: browser-checks/
           retention-days: 7
+      - name: Retain validated daily captures
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data archive
+          if ! git diff --cached --quiet; then
+            git commit -m "Refresh Cloudflare Radar capture [skip ci]"
+            git push origin HEAD:main
+          fi
       - name: Save reviewable site
         uses: actions/upload-artifact@v4
         with:

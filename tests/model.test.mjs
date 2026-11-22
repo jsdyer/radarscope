@@ -1,21 +1,12 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { cleanLines } from '../web/model.mjs';
-test('trims, removes blanks and preserves first-seen order', () => {
-  assert.deepEqual(cleanLines('  Halifax\nLangley\nHalifax\n\nVancouver  '), {
-    text: 'Halifax\nLangley\nVancouver', count: 3, removed: 1,
-  });
-});
-test('supports Windows and old Mac line endings', () => {
-  assert.equal(cleanLines('a\r\nb\ra').text, 'a\nb');
-});
-test('empty text and whitespace produce an empty result', () => {
-  assert.deepEqual(cleanLines(' \n\t'), { text: '', count: 0, removed: 0 });
-});
-test('preserves case and Unicode', () => {
-  assert.equal(cleanLines('Québec\nquébec\n東京\nQuébec').text, 'Québec\nquébec\n東京');
-});
-test('treats markup as ordinary text', () => {
-  assert.equal(cleanLines('<script>alert(1)</script>\n<script>alert(1)</script>').text, '<script>alert(1)</script>');
-});
-test('rejects non-text input', () => { assert.throws(() => cleanLines(null), TypeError); });
+import test from'node:test';import assert from'node:assert/strict';import{validate,latestPair,trimSeries,chartSegments,filterOutages,trafficCSV,outageCSV,safeURL,parseSnapshot}from'../web/model.mjs';
+const times=['2026-02-01T00:00:00Z','2026-02-01T01:00:00Z','2026-02-01T02:00:00Z','2026-02-01T03:00:00Z'];
+const traffic={country:'CA',name:'Canada',timestamps:times,values:[.2,null,.8,1],normalization:'MIN0_MAX',unit:'normalized index',source_url:'https://radar.cloudflare.com/traffic/ca'};
+const event={id:'test-event',start_at:times[0],end_at:null,description:'Test source event',event_type:'OUTAGE',countries:['CA'],asns:['64500'],scope:'country',cause:'test cause',outage_type:'test',source_url:'https://radar.cloudflare.com/outage-center'};
+const data={schema:1,tool:'radarscope',status:'ready',captured_at:'2026-02-01T04:00:00Z',traffic:[traffic],ip_versions:[{country:'CA',timestamps:times,ipv4:[60,null,58,55],ipv6:[40,null,42,45],normalization:'PERCENTAGE'}],outages:[event]};
+test('units, timeline and country uniqueness are validated',()=>{assert.equal(validate(data).traffic.length,1);assert.throws(()=>validate({...data,traffic:[{...traffic,values:[2,null,.8,1]}]}),/range/);assert.throws(()=>validate({...data,traffic:[traffic,traffic]}),/Duplicate/);assert.throws(()=>validate({...data,traffic:[{...traffic,timestamps:[times[1],times[0],times[2],times[3]]}]}),/increasing/);});
+test('null source points remain chart gaps and latest metric skips missing values',()=>{const s=chartSegments(times,traffic.values);assert.equal(s.groups.length,2);assert.equal(s.groups[0].length,1);assert.deepEqual(s.gaps,[1]);assert.equal(latestPair({...traffic,values:[.2,null,.8,null]}).value,.8);assert.equal(latestPair({...traffic,values:[null,null,null,null]}),null);});
+test('omitted time intervals break lines and x spacing is based on time',()=>{const t=[times[0],times[1],times[2],'2026-02-01T07:00:00Z'];const s=chartSegments(t,[.2,.3,.4,.5]);assert.equal(s.groups.length,2);assert.ok(s.groups[1][0].x-s.groups[0][2].x>300);});
+test('windows use series time rather than current clock and do not renormalize',()=>{const s=trimSeries(traffic,['values'],1);assert.deepEqual(s.timestamps,times.slice(2));assert.deepEqual(s.values,[.8,1]);});
+test('country and event filters preserve documented event semantics',()=>{assert.equal(filterOutages(data,{country:'US'}).length,0);assert.equal(filterOutages(data,{country:'all',query:'64500'}).length,1);assert.equal(filterOutages(data,{country:'CA',type:'ANOMALY'}).length,0);});
+test('CSV retains missing cells, units, source dates and neutralizes formula text',()=>{const csv=trafficCSV([traffic],data.captured_at);assert.ok(csv.includes('"2026-02-01T01:00:00Z",""'));assert.ok(csv.includes('MIN0_MAX'));assert.ok(csv.includes(data.captured_at));assert.ok(outageCSV([{...event,description:'=HYPERLINK()'}],data.captured_at).includes("'=HYPERLINK()"));});
+test('unsafe source links and malformed local snapshots are rejected',()=>{assert.equal(safeURL('javascript:alert(1)'),null);assert.equal(safeURL('https://secret@example.com'),null);assert.throws(()=>validate({...data,outages:[{...event,source_url:'javascript:alert(1)'}]}),/provenance/);assert.throws(()=>parseSnapshot('{"schema":999}'),/Radar Scope/);assert.equal(parseSnapshot(JSON.stringify({...data,status:'pending',captured_at:null,traffic:[],ip_versions:[],outages:[]})).status,'pending');});

@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "tool": "radarscope",
+  "status": "pending",
+  "captured_at": null,
+  "checked_at": null,
+  "coverage": "Cloudflare-observed HTTP traffic: 7 days, hourly; Canada with optional US and GB comparisons. Each country is normalized separately to its own maximum. Canadian outage annotations: 30-day source window, at most 500.",
+  "traffic": [],
+  "ip_versions": [],
+  "outages": [],
+  "sources": [],
+  "warnings": [
+    "First authenticated Cloudflare Radar collection has not completed. No measurements have been invented."
+  ],
+  "licence_url": "https://creativecommons.org/licenses/by-nc/4.0/"
+}
