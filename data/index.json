@@ -1,17 +1,1 @@
-{
-  "schema": 1,
-  "tool": "radarscope",
-  "status": "pending",
-  "source": "Cloudflare Radar",
-  "source_url": "https://radar.cloudflare.com/ca",
-  "record_count": 0,
-  "snapshot_count": 0,
-  "captured_at": null,
-  "checked_at": null,
-  "coverage": "Cloudflare-observed HTTP traffic: 7 days, hourly; Canada with optional US and GB comparisons. Each country is normalized separately to its own maximum. Canadian outage annotations: 30-day source window, at most 500.",
-  "latest": "current.json",
-  "history": "history.json",
-  "warnings": [
-    "First authenticated Cloudflare Radar collection has not completed. No measurements have been invented."
-  ]
-}
+{"captured_at":"2026-11-22T15:17:25Z","checked_at":"2026-11-22T15:17:25Z","coverage":"Cloudflare-observed HTTP traffic: 7 days, hourly; Canada with optional US and GB comparisons. Each country is normalized separately to its own maximum. Canadian outage annotations: 30-day source window, at most 500.","history":"history.json","latest":"current.json","licence_url":"https://creativecommons.org/licenses/by-nc/4.0/","outage_count":0,"record_count":501,"schema":1,"snapshot_count":1,"source":"Cloudflare Radar","source_url":"https://radar.cloudflare.com/ca","status":"ready","tool":"radarscope","warnings":[]}
