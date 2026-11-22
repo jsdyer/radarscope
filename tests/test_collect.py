@@ -1,4 +1,6 @@
-import copy,json,sys,tempfile,unittest
+import copy,io,json,socket,ssl,sys,tempfile,unittest
+from contextlib import redirect_stdout
+from urllib.error import HTTPError,URLError
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
@@ -38,12 +40,29 @@ class CollectorTests(unittest.TestCase):
   with patch.object(collect,'request') as request:
    with self.assertRaisesRegex(ValueError,'required'):collect.collect('')
    request.assert_not_called()
+ def test_transient_failures_report_safe_status_and_retry_bounds(self):
+  failures=[TimeoutError('never print this TEST-TOKEN'),URLError(socket.gaierror(-2,'never print DNS target')),
+            HTTPError('https://example.test/?token=TEST-TOKEN',503,'never print source body',{},None)]
+  for failure in failures:
+   output=io.StringIO()
+   with patch.object(collect,'urlopen',side_effect=failure) as fetch,patch.object(collect.time,'sleep'),redirect_stdout(output):
+    with self.assertRaises(RuntimeError) as raised:collect.request('/radar/http/timeseries',{'location':'CA','format':'JSON'},'TEST-TOKEN')
+   combined=output.getvalue()+str(raised.exception)
+   self.assertEqual(fetch.call_count,3);self.assertIn('/radar/http/timeseries [CA]',combined);self.assertNotIn('TEST-TOKEN',combined);self.assertNotIn('never print',combined)
+   expected='HTTP 503' if isinstance(failure,HTTPError) else 'DNS resolution failure' if isinstance(failure,URLError) else 'network timeout'
+   self.assertIn(expected,combined)
+ def test_auth_failure_is_not_retried_and_long_rate_pause_aborts(self):
+  for status,headers,expected in [(401,{},'authentication/permission'),(429,{'Retry-After':'120'},'Retry-After 120')]:
+   error=HTTPError('https://example.test',status,'sensitive response',headers,None)
+   with patch.object(collect,'urlopen',side_effect=error) as fetch,patch.object(collect.time,'sleep'):
+    with self.assertRaisesRegex(RuntimeError,expected):collect.request('/radar/http/timeseries',{'location':'CA'},'TEST-ONLY')
+    self.assertEqual(fetch.call_count,1)
  def test_collection_uses_uppercase_dimension_and_separate_normalization(self):
   paths=[]
   def request(path,params,token):
    paths.append((path,params));return ({'annotations':[]} if path.endswith('outages') else result(path.endswith('IP_VERSION'))),{'url':collect.BASE+path,'parameters':params}
   with patch.object(collect,'request',side_effect=request):data=collect.collect('TEST ONLY')
-  self.assertEqual(len(paths),7);self.assertEqual(len(data['traffic']),3);self.assertTrue(any(path.endswith('IP_VERSION') for path,_ in paths));self.assertNotIn('TEST ONLY',json.dumps(data))
+  self.assertTrue(all(params.get('format')=='JSON' for _,params in paths));self.assertEqual(len(paths),7);self.assertEqual(len(data['traffic']),3);self.assertTrue(any(path.endswith('IP_VERSION') for path,_ in paths));self.assertNotIn('TEST ONLY',json.dumps(data))
  def test_bounded_outage_pagination_is_explicit(self):
   def request(path,params,token):
    if path.endswith('outages'):

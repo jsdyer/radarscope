@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Daily bounded Cloudflare Radar collection; all tokens remain in the environment."""
-import argparse, hashlib, json, math, os, re, time
+import argparse, hashlib, json, math, os, re, socket, ssl, time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -35,29 +35,45 @@ def number(value,high):
     if not math.isfinite(n) or not 0<=n<=high+1e-6:raise ValueError('Source measurement outside declared normalization')
     return n
 
+def network_failure(exc):
+    """Classify network exceptions without logging URLs, headers or exception text."""
+    reason=exc.reason if isinstance(exc,URLError) else exc
+    if isinstance(reason,(TimeoutError,socket.timeout)):return 'network timeout'
+    if isinstance(reason,socket.gaierror):return 'DNS resolution failure'
+    if isinstance(reason,ssl.SSLError):return 'TLS connection failure'
+    if isinstance(reason,ConnectionResetError):return 'connection reset'
+    if isinstance(reason,ConnectionRefusedError):return 'connection refused'
+    if isinstance(reason,OSError):return 'network OS error'+(' errno='+str(reason.errno) if isinstance(reason.errno,int) else '')
+    return 'network transport failure'
+
 def request(path,params,token):
     url=BASE+path+'?'+urlencode(params)
+    label=path+' ['+str(params.get('location','unspecified'))+']'
+    last_failure='unknown failure'
     for attempt in range(3):
-        delay=2**(attempt+1)
+        delay=2**(attempt+1);started=time.monotonic()
         try:
             req=Request(url,headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'RadarScope/1.0 (+https://coolcode.ca/radarscope/)'})
             with urlopen(req,timeout=45) as response:raw=response.read(MAX_BYTES+1)
             if len(raw)>MAX_BYTES:raise ValueError('Source response exceeds 8 MB bound')
             data=json.loads(raw)
-            if not isinstance(data,dict) or data.get('success') is not True or not isinstance(data.get('result'),dict):raise ValueError('Cloudflare did not return a successful result')
+            if not isinstance(data,dict) or data.get('success') is not True or not isinstance(data.get('result'),dict):raise ValueError('Cloudflare did not return a successful result for '+label)
+            print('Cloudflare '+label+' succeeded in '+format(time.monotonic()-started,'.1f')+' seconds',flush=True)
             time.sleep(1)
             return data['result'],{'url':BASE+path,'parameters':params,'response_sha256':sha(raw)}
         except HTTPError as exc:
-            if exc.code in (401,403):raise RuntimeError('Cloudflare authentication failed; check CLOUDFLARE_RADAR_API_TOKEN and Radar read permission') from None
-            if exc.code!=429 and exc.code<500:raise RuntimeError(f'Cloudflare request rejected (HTTP {exc.code}); last good deployment retained') from None
+            last_failure='HTTP '+str(exc.code)
+            if exc.code in (401,403):raise RuntimeError('Cloudflare '+label+' authentication/permission failure ('+last_failure+'); check CLOUDFLARE_RADAR_API_TOKEN permission, expiry and IP restrictions') from None
+            if exc.code!=429 and exc.code<500:raise RuntimeError('Cloudflare '+label+' request rejected ('+last_failure+'); last good deployment retained') from None
             if exc.code==429:
                 retry=exc.headers.get('Retry-After','') if exc.headers else ''
                 if retry.isdigit():
-                    if int(retry)>60:raise RuntimeError('Cloudflare requested a longer pause; retry next collection') from None
+                    if int(retry)>60:raise RuntimeError('Cloudflare '+label+' HTTP 429 requested Retry-After '+retry+' seconds; retry next collection') from None
                     delay=max(delay,int(retry))
-        except (URLError,TimeoutError,OSError):pass
+        except (URLError,TimeoutError,OSError) as exc:last_failure=network_failure(exc)
+        print('Cloudflare '+label+' attempt '+str(attempt+1)+'/3 failed: '+last_failure+' after '+format(time.monotonic()-started,'.1f')+' seconds'+('; retrying in '+str(delay)+' seconds' if attempt<2 else ''),flush=True)
         if attempt<2:time.sleep(delay)
-    raise RuntimeError('Cloudflare unavailable after three attempts; last good deployment retained') from None
+    raise RuntimeError('Cloudflare '+label+' unavailable after three attempts: '+last_failure+'; last good deployment retained') from None
 
 def series_object(result):
     # Named series keys are dynamic. Accept exactly one timestamp-bearing object for a one-country request.
@@ -133,13 +149,13 @@ def collect(token):
     traffic=[];ips=[];sources=[];warnings=[]
     for country in COUNTRIES:
         print('Collecting Cloudflare HTTP and IP series for '+country)
-        params={'location':country,'dateRange':'7d','aggInterval':'1h','normalization':'MIN0_MAX','format':'json'}
+        params={'location':country,'dateRange':'7d','aggInterval':'1h','normalization':'MIN0_MAX','format':'JSON'}
         result,source=request('/radar/http/timeseries',params,token);item=normalize_traffic(result,country);traffic.append(item);source['metadata']={k:item[k] for k in ('normalization','date_range','last_updated','aggregation','confidence')};sources.append(source)
         params={**params,'normalization':'PERCENTAGE'}
         result,source=request('/radar/http/timeseries_groups/IP_VERSION',params,token);item=normalize_ip(result,country);ips.append(item);source['metadata']={k:item[k] for k in ('normalization','date_range','last_updated','aggregation','confidence')};sources.append(source)
     outages={};received=0;truncated=False
     for offset in range(0,500,100):
-        params={'location':'CA','dateRange':'30d','limit':100,'offset':offset,'format':'json'}
+        params={'location':'CA','dateRange':'30d','limit':100,'offset':offset,'format':'JSON'}
         result,source=request('/radar/annotations/outages',params,token);rows=result.get('annotations')
         if not isinstance(rows,list) or len(rows)>100:raise ValueError('Invalid bounded outage annotation response')
         source['received']=len(rows);sources.append(source);received+=len(rows)
