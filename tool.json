@@ -16,6 +16,7 @@
   "access": "browser",
   "data_info": {
     "mode": "snapshot",
-    "detail": "Daily Cloudflare Radar captures of hourly HTTP traffic and IP shares, with Canadian outage annotations and retained history."
+    "detail": "Daily Cloudflare Radar captures of hourly HTTP traffic and IP shares, with Canadian outage annotations and retained history.",
+    "cadence": "Daily"
   }
 }
