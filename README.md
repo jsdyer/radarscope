@@ -67,3 +67,11 @@ python3 -m http.server 8000 --directory dist
 ```
 
 `python3 scripts/collect.py` performs an explicitly authorized refresh with the token already in the environment. Add `--if-missing` to use an existing ready capture. The app and build need only Python/Node standard libraries. CI installs test-only Playwright for complete import/filter/export/history and mobile flow verification. Test-only fixtures are never shipped as observations. `dist/` is not committed.
+
+<!-- schedule-reliability -->
+## Schedule reliability
+
+Public GitHub repositories can have scheduled workflows disabled after 60 days of inactivity. A separate weekly [schedule guard](.github/workflows/schedule-guard.yml) calls GitHub's enable-workflow API for an explicit list of refresh workflows and itself. It can restore workflows disabled for inactivity, preserves manually disabled workflows, and runs independently of collection failures.
+
+This is an interim mitigation, not a scheduling guarantee: GitHub does not document active-workflow renewal as a permanent exemption, and scheduled runs can be delayed or dropped. A scheduler on our own Linux server is the planned independent trigger. The guard does not collect data, create dummy commits, or change source/check timestamps; successful collection and published data freshness still need monitoring.
+<!-- /schedule-reliability -->
