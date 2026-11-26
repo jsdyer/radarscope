@@ -3,7 +3,7 @@
 A static Canadian Internet observation desk at [coolcode.ca/radarscope/](https://coolcode.ca/radarscope/), built from saved Cloudflare Radar API captures.
 
 <!-- coolcode:guide -->
-Inspect seven days of hourly Canadian HTTP traffic and compare its daily rhythm with the United States or United Kingdom. Each country is normalized independently to its own maximum (0–1), so the curves compare shape, not traffic volume or market share. IPv4/IPv6 percentages describe the observed HTTP request mix. Canadian outage annotations cover a separate 30-day source window and are not an exhaustive outage register. Choose a retained capture, inspect gaps and source dates, or open/export a local snapshot without an API key in your browser.
+Open the [ISP outage check](https://coolcode.ca/outagescope/) for a specific Canadian network. Inspect seven days of hourly Canadian HTTP traffic and compare its daily rhythm with the United States or United Kingdom. Each country is normalized independently to its own maximum (0–1), so the curves compare shape, not traffic volume or market share. IPv4/IPv6 percentages describe the observed HTTP request mix. Canadian outage annotations cover a separate 30-day source window and are not an exhaustive outage register. Choose a retained capture, inspect gaps and source dates, or open/export a local snapshot without an API key in your browser.
 <!-- /coolcode:guide -->
 
 ## What the measurements mean

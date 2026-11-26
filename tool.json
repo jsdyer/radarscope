@@ -1,6 +1,6 @@
 {
   "id": "radarscope",
-  "title": "Radar Scope",
+  "title": "Canadian Internet Traffic & Outage History",
   "description": "Read Canadian internet traffic and disruption signals through Cloudflare Radar observations.",
   "category": "liminal-tools",
   "tags": [

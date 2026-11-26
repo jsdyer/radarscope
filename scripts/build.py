@@ -2,6 +2,7 @@
 """Build a browser tool using Python's standard library; no network required."""
 from html import escape
 import json
+from search_metadata import add_search_metadata
 from pathlib import Path
 import re
 import shutil
@@ -80,7 +81,7 @@ def build(root=ROOT):
             page = page.replace(placeholder, markup if on_coolcode else "")
         if re.search(r"\{\{[A-Z_]+\}\}", page):
             raise ValueError("Unresolved template placeholder in web/index.html")
-        index.write_text(page, encoding="utf-8")
+        index.write_text(add_search_metadata(page,tool), encoding="utf-8")
         (stage / ".nojekyll").touch()
         if output.exists():
             shutil.rmtree(output)
